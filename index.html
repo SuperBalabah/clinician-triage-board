@@ -280,11 +280,11 @@
               </div>
             </div>
 
-            <!-- AI 整理按鈕 -->
+            <!-- 錄音 AI 整理按鈕 -->
             <div class="flex justify-end">
-              <button onclick="simulateAISpeech()" class="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded-lg text-xs font-medium flex items-center gap-1 transition">
-                <i data-lucide="sparkles" class="w-3.5 h-3.5 text-emerald-400"></i>
-                <span>AI 整理</span>
+              <button onclick="simulateAISpeech()" id="btn-ai-record" class="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded-lg text-xs font-medium flex items-center gap-1.5 transition active:scale-95">
+                <i data-lucide="mic" id="icon-ai-record" class="w-3.5 h-3.5 text-rose-500"></i>
+                <span id="text-ai-record">AI 整理</span>
               </button>
             </div>
 
@@ -1136,12 +1136,24 @@
     }
 
     function simulateAISpeech() {
-      document.getElementById('form-i').value = "302床 張O美 (72F / 胃切除術後)";
-      document.getElementById('form-s').value = "腹部引流管近半小時引流 250ml 鮮紅血，BP 85/50";
-      document.getElementById('form-b').value = "昨日下午手術，原服用抗凝血劑，目前已快輸生理鹽水";
-      document.getElementById('form-a').value = "疑似吻合處活動性出血併低血容休克";
-      document.getElementById('form-r').value = "請求林醫師評估是否急送開刀房探查止血？";
-      document.getElementById('form-note').value = "家屬在床邊情緒焦慮";
+      const btn = document.getElementById('btn-ai-record');
+      const text = document.getElementById('text-ai-record');
+
+      btn.className = "px-3 py-1.5 bg-rose-950/60 border border-rose-500/50 text-rose-300 rounded-lg text-xs font-medium flex items-center gap-1.5 transition";
+      text.innerText = "錄音中...";
+
+      setTimeout(() => {
+        document.getElementById('form-i').value = "302床 張O美 (72F / 胃切除術後)";
+        document.getElementById('form-s').value = "腹部引流管近半小時引流 250ml 鮮紅血，BP 85/50";
+        document.getElementById('form-b').value = "昨日下午手術，原服用抗凝血劑，目前已快輸生理鹽水";
+        document.getElementById('form-a').value = "疑似吻合處活動性出血併低血容休克";
+        document.getElementById('form-r').value = "請求林醫師評估是否急送開刀房探查止血？";
+        document.getElementById('form-note').value = "家屬在床邊情緒焦慮";
+
+        btn.className = "px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded-lg text-xs font-medium flex items-center gap-1.5 transition";
+        text.innerText = "AI 整理";
+        lucide.createIcons();
+      }, 350);
     }
 
     function submitNewMessage() {
