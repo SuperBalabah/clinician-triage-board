@@ -1,0 +1,1277 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>臨床溝通分流系統</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            zinc: {
+              850: '#1f1f23',
+              900: '#18181b',
+              950: '#09090b',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .card-leave {
+      transition: all 0.2s ease-out;
+      transform: translateX(100%);
+      opacity: 0;
+      height: 0 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: hidden;
+    }
+  </style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 min-h-screen flex flex-col items-center p-2 sm:p-5 font-sans antialiased select-none">
+
+  <!-- 頂部示範切換器 (極簡展示列) -->
+  <header class="w-full max-w-[395px] mb-2.5 flex items-center justify-between px-2 text-xs text-zinc-400">
+    <div class="font-medium text-zinc-300 flex items-center gap-1.5">
+      <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+      臨床分流系統
+    </div>
+    <div class="flex items-center gap-1 bg-zinc-900 p-1 rounded-xl border border-zinc-800">
+      <button onclick="switchScreen('widget')" id="btn-screen-widget" class="px-2 py-1 rounded-lg hover:text-white transition">Widget</button>
+      <button onclick="switchScreen('board')" id="btn-screen-board" class="px-2 py-1 rounded-lg bg-zinc-800 text-white font-medium transition">看板</button>
+      <button onclick="openComposer()" id="btn-screen-composer" class="px-2 py-1 rounded-lg hover:text-white transition">發報</button>
+      <button onclick="switchScreen('settings')" id="btn-screen-settings" class="px-2 py-1 rounded-lg hover:text-white transition">設定</button>
+    </div>
+  </header>
+
+  <!-- 手機外框 -->
+  <div class="relative w-full max-w-[395px] h-[790px] bg-black rounded-[46px] p-2.5 shadow-2xl ring-1 ring-zinc-800 border border-zinc-700/50 flex flex-col overflow-hidden">
+    
+    <!-- 頂部狀態列 -->
+    <div class="flex items-center justify-between px-6 pt-3 pb-1 text-xs text-zinc-400 font-medium z-50">
+      <span id="clock-display">18:45</span>
+      <div class="w-20 h-4 bg-black rounded-full flex items-center justify-center">
+        <span class="w-1.5 h-1.5 rounded-full bg-zinc-600"></span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <i data-lucide="wifi" class="w-3.5 h-3.5"></i>
+        <i data-lucide="battery" class="w-3.5 h-3.5"></i>
+      </div>
+    </div>
+
+    <!-- 螢幕視窗容器 -->
+    <div class="relative flex-1 bg-zinc-950 rounded-[36px] overflow-hidden flex flex-col border border-zinc-900">
+
+      <!-- ============================================== -->
+      <!-- 畫面 1: 桌面 Widget 視角 (短按輪跳、長按選單) -->
+      <!-- ============================================== -->
+      <div id="view-widget" class="hidden absolute inset-0 bg-zinc-950 p-4 flex flex-col justify-between overflow-y-auto no-scrollbar">
+        <div class="pt-8 text-center">
+          <div class="text-5xl font-light text-zinc-100 tracking-tight">18:45</div>
+          <div class="text-xs text-zinc-500 mt-1">11月22日 週日</div>
+        </div>
+
+        <!-- 狀態小工具 -->
+        <div id="desktop-widget" 
+             onmousedown="startWidgetPress()" 
+             onmouseup="endWidgetPress(event)" 
+             ontouchstart="startWidgetPress()" 
+             ontouchend="endWidgetPress(event)"
+             class="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-4 shadow-lg cursor-pointer active:scale-98 transition">
+          <div class="flex items-center justify-between pb-3 border-b border-zinc-800/80">
+            <div>
+              <div class="text-[11px] text-zinc-500 font-medium">當前臨床狀態</div>
+              <div id="widget-status-text" class="text-sm font-semibold text-zinc-100 mt-0.5 flex items-center gap-2">
+                上刀中 (盡量留言)
+              </div>
+            </div>
+          </div>
+
+          <!-- 待回覆快覽 (點擊直通看板) -->
+          <div onclick="event.stopPropagation(); switchScreen('board')" class="mt-3 p-2.5 rounded-xl bg-zinc-950 border border-zinc-800/80 hover:border-zinc-700 transition">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-zinc-400">待回覆</span>
+              <span id="widget-urgent-tag" class="text-rose-400 font-medium">最急: 12分內</span>
+            </div>
+            <div id="widget-preview-text" class="text-xs text-zinc-300 mt-1 font-medium truncate">
+              王大明 急診R · 評估是否急送刀房止血
+            </div>
+          </div>
+        </div>
+
+        <!-- 桌面圖示 -->
+        <div class="grid grid-cols-4 gap-4 px-2 py-6">
+          <div onclick="switchScreen('board')" class="flex flex-col items-center gap-1 cursor-pointer">
+            <div class="w-14 h-14 rounded-2xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-100 relative shadow">
+              <i data-lucide="message-square" class="w-6 h-6"></i>
+              <span id="widget-badge-count" class="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">10</span>
+            </div>
+            <span class="text-[11px] text-zinc-400 font-medium">留言板</span>
+          </div>
+          <div class="flex flex-col items-center gap-1 opacity-40">
+            <div class="w-14 h-14 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500">
+              <i data-lucide="file-text" class="w-6 h-6"></i>
+            </div>
+            <span class="text-[11px] text-zinc-500">HIS</span>
+          </div>
+          <div class="flex flex-col items-center gap-1 opacity-40">
+            <div class="w-14 h-14 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500">
+              <i data-lucide="calendar" class="w-6 h-6"></i>
+            </div>
+            <span class="text-[11px] text-zinc-500">刀房</span>
+          </div>
+          <div onclick="switchScreen('settings')" class="flex flex-col items-center gap-1 cursor-pointer">
+            <div class="w-14 h-14 rounded-2xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 flex items-center justify-center text-zinc-400">
+              <i data-lucide="settings" class="w-6 h-6"></i>
+            </div>
+            <span class="text-[11px] text-zinc-400 font-medium">設定</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================== -->
+      <!-- 畫面 2: 醫師看板 (主視圖) -->
+      <!-- ============================================== -->
+      <div id="view-board" class="absolute inset-0 bg-zinc-950 flex flex-col overflow-hidden">
+        
+        <!-- Header -->
+        <div class="px-4 pt-3 pb-2.5 border-b border-zinc-800/80 bg-zinc-950">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2 cursor-pointer" onclick="openProfile('self')">
+              <div class="w-8 h-8 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-bold text-zinc-200">
+                林
+              </div>
+              <div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-sm font-semibold text-zinc-100">林醫師</span>
+                  <span id="badge-board-status" class="text-[11px] text-zinc-400 bg-zinc-900 border border-zinc-800 px-1.5 py-0.2 rounded-md">
+                    上刀中 (盡量留言)
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 前往設定 -->
+            <button onclick="switchScreen('settings')" class="p-1.5 text-zinc-400 hover:text-zinc-200 rounded-lg hover:bg-zinc-900 transition">
+              <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>
+            </button>
+          </div>
+
+          <!-- 雙頁籤：動態數值 [待回覆(N) / 已傳送(N回覆)] -->
+          <div class="mt-3 flex bg-zinc-900 p-0.5 rounded-xl border border-zinc-800/80">
+            <button onclick="switchTab('inbox')" id="tab-inbox" class="flex-1 py-1.5 text-xs font-medium rounded-lg bg-zinc-800 text-zinc-100 shadow-sm transition">
+              待回覆 (10)
+            </button>
+            <button onclick="switchTab('outbox')" id="tab-outbox" class="flex-1 py-1.5 text-xs font-medium rounded-lg text-zinc-400 hover:text-zinc-200 transition">
+              已傳送 (2回覆)
+            </button>
+          </div>
+        </div>
+
+        <!-- 卡片列表區 -->
+        <div class="flex-1 overflow-y-auto p-3 space-y-2.5 no-scrollbar pb-24">
+          
+          <!-- 待回覆清單 -->
+          <div id="list-inbox" class="space-y-2.5"></div>
+
+          <!-- 已傳送清單 -->
+          <div id="list-outbox" class="hidden space-y-2.5"></div>
+
+        </div>
+
+        <!-- 浮動新增按鈕 (FAB) -->
+        <div class="absolute bottom-4 right-4 z-20">
+          <button onclick="openComposer()" class="w-12 h-12 rounded-2xl bg-zinc-100 hover:bg-white text-zinc-950 font-bold shadow-xl flex items-center justify-center active:scale-95 transition">
+            <i data-lucide="plus" class="w-6 h-6 stroke-[2.5]"></i>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- ============================================== -->
+      <!-- 畫面 3: 發送通知 (先選對象 -> 再選通訊方式) -->
+      <!-- ============================================== -->
+      <div id="view-composer" class="hidden absolute inset-0 bg-zinc-950 flex flex-col overflow-hidden">
+        
+        <div class="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <button onclick="switchScreen('board')" class="text-zinc-400 hover:text-white">
+              <i data-lucide="arrow-left" class="w-5 h-5"></i>
+            </button>
+            <span class="text-sm font-semibold text-zinc-100">發起通知</span>
+          </div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar pb-20">
+          
+          <!-- 第一步：選擇通知對象 -->
+          <div class="space-y-2">
+            <label class="text-[11px] text-zinc-400 font-medium">對象</label>
+            
+            <input id="composer-search" oninput="filterStaffDirectory(this.value)" type="text" placeholder="搜尋姓名或員工編號..." class="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-100 outline-none focus:border-zinc-700">
+
+            <!-- 科部快選 -->
+            <div class="flex gap-1.5 overflow-x-auto no-scrollbar py-0.5 text-[11px]">
+              <button onclick="filterStaffByDept('all')" class="dept-chip px-2.5 py-1 bg-zinc-800 text-white rounded-lg">全部</button>
+              <button onclick="filterStaffByDept('一般外科')" class="dept-chip px-2.5 py-1 bg-zinc-900 border border-zinc-800 text-zinc-400 rounded-lg">一般外科</button>
+              <button onclick="filterStaffByDept('急診部')" class="dept-chip px-2.5 py-1 bg-zinc-900 border border-zinc-800 text-zinc-400 rounded-lg">急診部</button>
+              <button onclick="filterStaffByDept('心內科')" class="dept-chip px-2.5 py-1 bg-zinc-900 border border-zinc-800 text-zinc-400 rounded-lg">心內科</button>
+              <button onclick="filterStaffByDept('病房專師')" class="dept-chip px-2.5 py-1 bg-zinc-900 border border-zinc-800 text-zinc-400 rounded-lg">病房專師</button>
+            </div>
+
+            <!-- 對象清單 -->
+            <div id="staff-select-list" class="space-y-1.5 max-h-40 overflow-y-auto no-scrollbar"></div>
+
+            <!-- 已選取對象卡片 -->
+            <div id="selected-target-card" class="hidden p-2.5 rounded-xl bg-zinc-900 border border-zinc-700 flex items-center justify-between text-xs">
+              <div>
+                <span class="font-semibold text-zinc-100" id="selected-target-name">林醫師</span>
+                <span class="text-zinc-500 text-[11px] ml-1.5" id="selected-target-dept">一般外科 · EMP1028</span>
+                <div class="text-[11px] text-zinc-400 mt-0.5" id="selected-target-status">上刀中 (盡量留言)</div>
+              </div>
+              <button onclick="openProfile(selectedStaffId)" class="text-zinc-400 hover:text-white text-[11px] underline">查看檔案</button>
+            </div>
+          </div>
+
+          <!-- 第二步：通訊方式分流 -->
+          <div id="composer-mode-section" class="space-y-2 hidden">
+            <label class="text-[11px] text-zinc-400 font-medium">方式</label>
+            <div class="grid grid-cols-3 gap-2">
+              <button onclick="setSendMode('urgent-call')" id="btn-mode-urgent" class="p-2.5 rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-rose-500/50 flex flex-col items-center gap-1 transition">
+                <i data-lucide="alert-triangle" class="w-4 h-4 text-rose-500"></i>
+                <span class="text-xs font-semibold">急 Call</span>
+              </button>
+              <button onclick="setSendMode('normal-call')" id="btn-mode-normal" class="p-2.5 rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-600 flex flex-col items-center gap-1 transition">
+                <i data-lucide="phone" class="w-4 h-4 text-zinc-300"></i>
+                <span class="text-xs font-semibold">一般 Call</span>
+              </button>
+              <button onclick="setSendMode('message')" id="btn-mode-msg" class="p-2.5 rounded-xl border border-zinc-600 bg-zinc-800 text-white flex flex-col items-center gap-1 transition">
+                <i data-lucide="message-square" class="w-4 h-4 text-emerald-400"></i>
+                <span class="text-xs font-semibold">留言板</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 通話模式按鈕 (無任何多餘說明廢話) -->
+          <div id="section-direct-call-hint" class="hidden pt-1">
+            <button onclick="startDirectCallFromComposer()" id="btn-direct-call-action" class="w-full py-3 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded-xl text-xs transition">
+              撥出
+            </button>
+          </div>
+
+          <!-- 留言板模式 (時限 + 結構欄位) -->
+          <div id="section-message-form" class="space-y-3 hidden">
+            
+            <!-- 回覆時限 -->
+            <div class="space-y-1">
+              <label class="text-[11px] text-zinc-400 font-medium">回覆時限</label>
+              <div class="flex gap-1.5">
+                <button onclick="pickDeadline(this, '15分鐘內')" class="deadline-chip flex-1 py-1.5 rounded-lg bg-zinc-800 border border-zinc-600 text-xs text-white font-medium">15分鐘內</button>
+                <button onclick="pickDeadline(this, '1小時內')" class="deadline-chip flex-1 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-400">1小時內</button>
+                <button onclick="pickDeadline(this, '4小時內')" class="deadline-chip flex-1 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-400">4小時內</button>
+                <button onclick="pickDeadline(this, '當班內')" class="deadline-chip flex-1 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-400">當班內</button>
+              </div>
+            </div>
+
+            <!-- AI 整理按鈕 -->
+            <div class="flex justify-end">
+              <button onclick="simulateAISpeech()" class="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded-lg text-xs font-medium flex items-center gap-1 transition">
+                <i data-lucide="sparkles" class="w-3.5 h-3.5 text-emerald-400"></i>
+                <span>AI 整理</span>
+              </button>
+            </div>
+
+            <!-- 純中文結構化欄位 -->
+            <div class="space-y-2 text-xs">
+              <div>
+                <span class="text-[11px] text-zinc-500 font-medium">身分</span>
+                <input id="form-i" type="text" placeholder="床號 / 姓名 / 診斷" class="w-full mt-0.5 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-zinc-100 placeholder-zinc-600 outline-none focus:border-zinc-700">
+              </div>
+              <div>
+                <span class="text-[11px] text-zinc-500 font-medium">現況</span>
+                <input id="form-s" type="text" placeholder="突發狀況" class="w-full mt-0.5 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-zinc-100 placeholder-zinc-600 outline-none focus:border-zinc-700">
+              </div>
+              <div>
+                <span class="text-[11px] text-zinc-500 font-medium">背景</span>
+                <textarea id="form-b" rows="2" placeholder="病史 / 處置" class="w-full mt-0.5 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-zinc-100 placeholder-zinc-600 outline-none focus:border-zinc-700 resize-none"></textarea>
+              </div>
+              <div>
+                <span class="text-[11px] text-zinc-500 font-medium">評估</span>
+                <input id="form-a" type="text" placeholder="初步判斷" class="w-full mt-0.5 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-zinc-100 placeholder-zinc-600 outline-none focus:border-zinc-700">
+              </div>
+              <div>
+                <span class="text-[11px] text-zinc-500 font-medium">請求</span>
+                <input id="form-r" type="text" placeholder="請求處置" class="w-full mt-0.5 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-zinc-100 font-medium placeholder-zinc-600 outline-none focus:border-zinc-700">
+              </div>
+              <div>
+                <span class="text-[11px] text-zinc-500 font-medium">附註</span>
+                <input id="form-note" type="text" placeholder="備註" class="w-full mt-0.5 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-amber-200 text-xs placeholder-zinc-600 outline-none focus:border-zinc-700">
+              </div>
+            </div>
+
+            <button onclick="submitNewMessage()" class="w-full py-2.5 bg-zinc-100 hover:bg-white text-zinc-950 font-semibold rounded-xl text-xs transition active:scale-98 shadow-md">
+              發送
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ============================================== -->
+      <!-- 畫面 4: 通話畫面 (明確區分：回覆某留言 vs 主動通話) -->
+      <!-- ============================================== -->
+      <div id="view-call" class="hidden absolute inset-0 bg-zinc-950 flex flex-col justify-between p-6">
+        
+        <!-- 頂部通話標註 -->
+        <div class="mt-4 bg-zinc-900 border border-zinc-800 rounded-2xl p-3.5 text-center">
+          <div id="call-context-tag" class="text-[11px] text-zinc-400 font-medium">回覆留言</div>
+          <div id="call-target-name" class="text-sm font-semibold text-zinc-100 mt-0.5">王大明 急診R</div>
+          <div id="call-target-reason" class="text-xs text-zinc-400 mt-1">針對：評估是否急送刀房止血</div>
+        </div>
+
+        <div class="text-center my-auto">
+          <div class="w-20 h-20 rounded-full bg-zinc-900 border border-zinc-800 mx-auto flex items-center justify-center text-xl font-bold text-zinc-200" id="call-avatar">
+            王
+          </div>
+          <div class="text-sm font-semibold text-zinc-100 mt-3">通話中 00:24</div>
+          <div id="call-type-indicator" class="text-xs text-rose-400 mt-1">急 Call</div>
+        </div>
+
+        <button onclick="endCall()" class="w-full py-3.5 bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-medium rounded-2xl flex items-center justify-center gap-2 shadow-lg transition">
+          <i data-lucide="phone-off" class="w-4 h-4"></i>
+          掛斷
+        </button>
+      </div>
+
+      <!-- ============================================== -->
+      <!-- 畫面 5: 設定區 (App Settings) -->
+      <!-- ============================================== -->
+      <div id="view-settings" class="hidden absolute inset-0 bg-zinc-950 flex flex-col overflow-hidden">
+        
+        <div class="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <button onclick="switchScreen('board')" class="text-zinc-400 hover:text-white">
+              <i data-lucide="arrow-left" class="w-5 h-5"></i>
+            </button>
+            <span class="text-sm font-semibold text-zinc-100">設定</span>
+          </div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar pb-16 text-xs">
+          
+          <!-- 看板顯示偏好 -->
+          <div class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-3.5 space-y-2">
+            <div class="font-semibold text-zinc-200">看板預設顯示</div>
+            <div class="space-y-1.5 text-zinc-300">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="setting-display-mode" value="request-only" checked onchange="updateDisplaySetting(this.value)" class="accent-zinc-100">
+                <span>只顯示請求</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="setting-display-mode" value="request-and-situation" onchange="updateDisplaySetting(this.value)" class="accent-zinc-100">
+                <span>顯示請求 + 現況</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- 小工具狀態與偏好 -->
+          <div class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-3.5 space-y-2.5">
+            <div class="font-semibold text-zinc-200">小工具狀態與偏好</div>
+            <div id="settings-status-list" class="space-y-2"></div>
+          </div>
+
+          <!-- 個人附註 -->
+          <div class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-3.5 space-y-2">
+            <div class="font-semibold text-zinc-200">個人附註</div>
+            <textarea id="setting-my-note" rows="3" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-100 outline-none focus:border-zinc-700 resize-none" placeholder="輸入附註內容..."></textarea>
+            <button onclick="saveMyNote()" class="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg text-xs font-medium">
+              儲存
+            </button>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- ============================================== -->
+      <!-- 彈窗: 醫護個人檔案卡 (Profile Modal) -->
+      <!-- ============================================== -->
+      <div id="modal-profile" class="hidden absolute inset-0 bg-black/80 backdrop-blur-sm z-50 flex flex-col justify-end p-3">
+        <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-3">
+          <div class="flex items-center justify-between pb-2 border-b border-zinc-800">
+            <span class="text-xs font-semibold text-zinc-200">醫護個人檔案</span>
+            <button onclick="toggleModal('modal-profile', false)" class="text-zinc-400 hover:text-white">
+              <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-base font-bold text-zinc-200" id="prof-avatar">
+              王
+            </div>
+            <div>
+              <div class="text-sm font-semibold text-zinc-100" id="prof-name">王大明</div>
+              <div class="text-[11px] text-zinc-400" id="prof-dept">急診部 · 員工編號 EMP2041</div>
+            </div>
+          </div>
+
+          <!-- 狀態與偏好 -->
+          <div class="p-2.5 bg-zinc-950 rounded-xl border border-zinc-800 space-y-1 text-xs">
+            <div class="flex justify-between">
+              <span class="text-zinc-500">當前狀態</span>
+              <span class="text-zinc-200 font-medium" id="prof-status">值班中</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-zinc-500">通訊偏好</span>
+              <span class="text-emerald-400 font-medium" id="prof-pref">可 call 可留言</span>
+            </div>
+          </div>
+
+          <!-- 個人附註 -->
+          <div class="p-2.5 bg-zinc-950 rounded-xl border border-zinc-800 text-xs">
+            <span class="text-zinc-500 block mb-1">個人附註：</span>
+            <div class="text-amber-200/90" id="prof-note">
+              急診第一線，若遇重大急救請直接急 Call。
+            </div>
+          </div>
+
+          <!-- 快捷操作 -->
+          <div class="flex gap-2 pt-1">
+            <button onclick="directCallFromProfile('urgent')" class="flex-1 py-2 bg-rose-950/60 border border-rose-900/60 hover:bg-rose-900/60 text-rose-300 text-xs font-medium rounded-xl">急 Call</button>
+            <button onclick="directCallFromProfile('normal')" class="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium rounded-xl">一般 Call</button>
+            <button onclick="directMessageFromProfile()" class="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium rounded-xl">留言</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================== -->
+      <!-- 彈窗: 訊息回覆抽屜 (自己打 vs 語音 AI 總結) -->
+      <!-- ============================================== -->
+      <div id="modal-reply" class="hidden absolute inset-0 bg-black/80 backdrop-blur-sm z-50 flex flex-col justify-end p-3">
+        <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-3">
+          <div class="flex items-center justify-between pb-2 border-b border-zinc-800">
+            <span class="text-xs font-semibold text-zinc-200" id="reply-title">回覆</span>
+            <button onclick="toggleModal('modal-reply', false)" class="text-zinc-400 hover:text-white">
+              <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+          </div>
+
+          <!-- 模式切換 -->
+          <div class="flex bg-zinc-950 p-0.5 rounded-xl border border-zinc-800 text-xs">
+            <button onclick="switchReplyMode('text')" id="btn-reply-text" class="flex-1 py-1.5 rounded-lg bg-zinc-800 text-zinc-100 font-medium">自己打</button>
+            <button onclick="switchReplyMode('voice')" id="btn-reply-voice" class="flex-1 py-1.5 rounded-lg text-zinc-400 hover:text-white">語音 AI 總結</button>
+          </div>
+
+          <!-- 自己打 -->
+          <div id="reply-text-area" class="space-y-2">
+            <textarea id="input-reply-text" rows="3" placeholder="輸入回覆內容..." class="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-zinc-100 outline-none focus:border-zinc-700 resize-none"></textarea>
+          </div>
+
+          <!-- 語音給 AI 總結 -->
+          <div id="reply-voice-area" class="hidden space-y-2">
+            <div class="bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-center">
+              <button onclick="simulateVoiceSummary()" class="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs flex items-center gap-1.5 mx-auto border border-zinc-700">
+                <i data-lucide="mic" class="w-3.5 h-3.5 text-emerald-400"></i>
+                <span>模擬語音輸入</span>
+              </button>
+            </div>
+            <textarea id="ai-summary-output" rows="2" placeholder="AI 總結（可編輯）..." class="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2 text-xs text-zinc-200 outline-none resize-none"></textarea>
+          </div>
+
+          <button onclick="sendReply()" class="w-full py-2.5 bg-zinc-100 hover:bg-white text-zinc-950 text-xs font-semibold rounded-xl transition">
+            送出回覆
+          </button>
+        </div>
+      </div>
+
+      <!-- ============================================== -->
+      <!-- 彈窗: 回撥選擇 (急Call vs 一般Call) -->
+      <!-- ============================================== -->
+      <div id="modal-call-type" class="hidden absolute inset-0 bg-black/80 backdrop-blur-sm z-50 flex flex-col justify-end p-3">
+        <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-3">
+          <div class="flex items-center justify-between pb-2 border-b border-zinc-800">
+            <span class="text-xs font-semibold text-zinc-200" id="call-modal-title">回撥</span>
+            <button onclick="toggleModal('modal-call-type', false)" class="text-zinc-400 hover:text-white">
+              <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+          </div>
+
+          <div class="space-y-2">
+            <button onclick="executeCall('urgent')" class="w-full p-3 rounded-xl bg-zinc-950 hover:bg-zinc-800 border border-rose-900/60 flex items-center justify-between text-left transition">
+              <div>
+                <div class="text-xs font-bold text-rose-400 flex items-center gap-1.5">
+                  <i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i>
+                  急 Call
+                </div>
+              </div>
+              <i data-lucide="chevron-right" class="w-4 h-4 text-zinc-500"></i>
+            </button>
+
+            <button onclick="executeCall('normal')" class="w-full p-3 rounded-xl bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 flex items-center justify-between text-left transition">
+              <div>
+                <div class="text-xs font-bold text-zinc-200 flex items-center gap-1.5">
+                  <i data-lucide="phone" class="w-3.5 h-3.5"></i>
+                  一般 Call
+                </div>
+              </div>
+              <i data-lucide="chevron-right" class="w-4 h-4 text-zinc-500"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================== -->
+      <!-- 彈窗: Widget 狀態選單 -->
+      <!-- ============================================== -->
+      <div id="modal-widget-picker" class="hidden absolute inset-0 bg-black/80 backdrop-blur-sm z-50 flex flex-col justify-end p-3">
+        <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-2">
+          <div class="flex items-center justify-between pb-2 border-b border-zinc-800">
+            <span class="text-xs font-semibold text-zinc-200">選擇切換狀態</span>
+            <button onclick="toggleModal('modal-widget-picker', false)" class="text-zinc-400 hover:text-white">
+              <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+          </div>
+          <div id="widget-picker-options" class="space-y-1.5 text-xs"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 底部主橫條 -->
+    <div class="flex justify-center py-1">
+      <div onclick="switchScreen('widget')" class="w-28 h-1 bg-zinc-700 hover:bg-white rounded-full cursor-pointer transition"></div>
+    </div>
+
+  </div>
+
+  <script>
+    // ==========================================
+    // 狀態資料儲存 (State Management)
+    // ==========================================
+    let displayPreference = 'request-only'; // 'request-only' 或 'request-and-situation'
+    let myCustomNote = "週三下午門診；若休假非緊急請找第一線值班R。";
+
+    // 醫師自訂小工具可切換的狀態庫
+    let userStatuses = [
+      { name: '上刀中', pref: '盡量留言', active: true },
+      { name: '查房中', pref: '可call可留言', active: true },
+      { name: '門診中', pref: '盡量留言', active: true },
+      { name: '值班中', pref: '可call', active: true },
+      { name: '休息中', pref: '請勿打擾', active: true }
+    ];
+    let currentStatusIndex = 0;
+
+    // 院內通訊錄 (提供 + 號選擇對象與個人主頁)
+    const staffDirectory = [
+      { id: 'EMP1028', name: '林醫師', dept: '一般外科', title: '主治醫師', status: '上刀中', pref: '盡量留言', note: myCustomNote },
+      { id: 'EMP2041', name: '王大明', dept: '急診部', title: '住院醫師 (急診R)', status: '值班中', pref: '可call', note: '急診第一線，重大危急請直接急 Call。' },
+      { id: 'EMP3188', name: '陳敏', dept: '病房專師', title: '7A專責護理師', status: '查房中', pref: '可call可留言', note: '目前在 7A 病房查房。' },
+      { id: 'EMP0912', name: '周宏', dept: '心內科', title: '心臟內科主治', status: '門診中', pref: '盡量留言', note: '在診間 3 看診中，請優先留言。' },
+      { id: 'EMP4502', name: '李怡婷', dept: '一般外科', title: '病房護理師', status: '值班中', pref: '可call', note: '負責 215-220 床。' }
+    ];
+
+    // 待回覆留言資料 (Inbox)
+    let inboxMessages = [
+      {
+        id: 'msg-1',
+        senderId: 'EMP2041',
+        senderName: '王大明 急診R',
+        timeLeft: '12 分鐘內',
+        urgent: true,
+        identity: '302床 張O美 (72F / 胃癌術後 D1)',
+        situation: '腹腔引流管湧出 250ml 鮮紅血，BP 85/50，HR 125',
+        background: '昨日胃次全切除術，術前有服抗凝血劑',
+        assessment: '疑吻合處活動性出血併低血容休克',
+        request: '請求評估是否急送開刀房探查止血？',
+        note: '家屬情緒非常焦慮，在床邊等候指示'
+      },
+      {
+        id: 'msg-2',
+        senderId: 'EMP3188',
+        senderName: '陳敏 7A專師',
+        timeLeft: '42 分鐘內',
+        urgent: false,
+        identity: '508床 李O男 (60M)',
+        situation: '突發高燒 39.1°C 併發抖，抗生素已用滿5天',
+        background: '膽道感染入院，原使用 Cefazolin',
+        assessment: '懷疑突破性感染或抗藥性菌株',
+        request: '請問是否加抽血瓶並升階更換抗生素？',
+        note: '病人表示寒顫非常不適'
+      },
+      {
+        id: 'msg-3',
+        senderId: 'EMP4502',
+        senderName: '李怡婷 護理師',
+        timeLeft: '當班內',
+        urgent: false,
+        identity: '215床 簡O華 (45F)',
+        situation: '明日預計出院，家屬詢問居家換藥',
+        background: '闌尾切除術後，傷口乾燥乾淨',
+        assessment: '恢復良好，常規出院即可',
+        request: '出院帶藥是否需開立外用抗生素軟膏？',
+        note: ''
+      }
+    ];
+
+    // 已傳送留言資料 (Outbox)
+    let outboxMessages = [
+      {
+        id: 'out-1',
+        targetId: 'EMP0912',
+        targetName: '周宏 心內科',
+        status: 'replied', // 已回覆
+        replyText: '初步排除心梗，先給予硝酸甘油，下午追蹤指數。',
+        identity: '302床 張O美',
+        situation: '術前胸悶 EKG ST elevation 疑慮',
+        background: '準備胃切除術前常規檢查',
+        assessment: '下壁導聯略有 ST 異常抬高',
+        request: '請求心內專科急會診判讀',
+        note: ''
+      },
+      {
+        id: 'out-2',
+        targetId: 'EMP2041',
+        targetName: '急診 CT 判讀室',
+        status: 'waiting', // 未回覆
+        replyText: '',
+        identity: '412床 林先生',
+        situation: '突發急性劇烈腹痛併腹膜刺激徵候',
+        background: '急診剛完成腹部骨盆 CT',
+        assessment: '疑似消化道穿孔',
+        request: '請求確認 CT 是否有腹腔游離氣體？',
+        note: ''
+      }
+    ];
+
+    // 全局呼叫暫存
+    let activeCallContext = { isReply: false, name: '', reason: '', avatar: '王', type: 'urgent' };
+    let selectedStaffId = 'EMP1028';
+    let composerMode = 'message';
+    let composerDeadline = '15分鐘內';
+
+    // Widget 長按定時器
+    let pressTimer = null;
+    let isLongPress = false;
+
+    // ==========================================
+    // 初始化渲染
+    // ==========================================
+    window.onload = function() {
+      lucide.createIcons();
+      renderBoard();
+      renderSettingsStatusList();
+      renderStaffSelectList(staffDirectory);
+      document.getElementById('setting-my-note').value = myCustomNote;
+    };
+
+    // 視角切換器
+    function switchScreen(screen) {
+      ['widget', 'board', 'composer', 'call', 'settings'].forEach(s => {
+        const el = document.getElementById(`view-${s}`);
+        const btn = document.getElementById(`btn-screen-${s}`);
+        if (el) {
+          if (s === screen) el.classList.remove('hidden');
+          else el.classList.add('hidden');
+        }
+        if (btn) {
+          if (s === screen) btn.className = "px-2 py-1 rounded-lg bg-zinc-800 text-white font-medium transition";
+          else btn.className = "px-2 py-1 rounded-lg hover:text-white transition";
+        }
+      });
+      lucide.createIcons();
+    }
+
+    // 頁籤切換
+    function switchTab(tab) {
+      const inboxEl = document.getElementById('list-inbox');
+      const outboxEl = document.getElementById('list-outbox');
+      const tabInbox = document.getElementById('tab-inbox');
+      const tabOutbox = document.getElementById('tab-outbox');
+
+      if (tab === 'inbox') {
+        inboxEl.classList.remove('hidden');
+        outboxEl.classList.add('hidden');
+        tabInbox.className = "flex-1 py-1.5 text-xs font-medium rounded-lg bg-zinc-800 text-zinc-100 shadow-sm transition";
+        tabOutbox.className = "flex-1 py-1.5 text-xs font-medium rounded-lg text-zinc-400 hover:text-zinc-200 transition";
+      } else {
+        inboxEl.classList.add('hidden');
+        outboxEl.classList.remove('hidden');
+        tabOutbox.className = "flex-1 py-1.5 text-xs font-medium rounded-lg bg-zinc-800 text-zinc-100 shadow-sm transition";
+        tabInbox.className = "flex-1 py-1.5 text-xs font-medium rounded-lg text-zinc-400 hover:text-zinc-200 transition";
+      }
+      lucide.createIcons();
+    }
+
+    // ==========================================
+    // 動態看板渲染 (Inbox & Outbox)
+    // ==========================================
+    function renderBoard() {
+      // 1. 待回覆清單 (Inbox)
+      const inboxContainer = document.getElementById('list-inbox');
+      inboxContainer.innerHTML = '';
+
+      inboxMessages.forEach(msg => {
+        const card = document.createElement('div');
+        card.id = `card-${msg.id}`;
+        card.className = "bg-zinc-900/80 border border-zinc-800/90 rounded-2xl p-3 shadow-sm transition-all";
+
+        const timeTagClass = msg.urgent 
+          ? "text-rose-400 bg-rose-950/40 border-rose-900/40" 
+          : "text-amber-400 bg-amber-950/40 border-amber-900/40";
+
+        card.innerHTML = `
+          <div class="flex items-center justify-between">
+            <button onclick="openProfile('${msg.senderId}')" class="text-xs font-semibold text-zinc-200 bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700/50 px-2 py-0.5 rounded-md transition">
+              ${msg.senderName}
+            </button>
+            <span class="text-[11px] font-medium border px-2 py-0.5 rounded-full ${timeTagClass}">
+              ${msg.timeLeft}
+            </span>
+          </div>
+
+          <div class="mt-2.5 cursor-pointer" onclick="toggleCardDetail('${msg.id}')">
+            ${displayPreference === 'request-and-situation' ? `<div class="text-xs text-zinc-400 mb-1">${msg.situation}</div>` : ''}
+            <div class="text-xs font-medium text-zinc-100 leading-snug">
+              ${msg.request}
+            </div>
+          </div>
+
+          <div id="detail-${msg.id}" class="hidden mt-3 pt-2.5 border-t border-zinc-800 text-xs space-y-1.5">
+            <div class="grid grid-cols-[36px_1fr] gap-1 text-zinc-300"><span class="text-zinc-500 font-medium">身分</span><span>${msg.identity}</span></div>
+            <div class="grid grid-cols-[36px_1fr] gap-1 text-zinc-300"><span class="text-zinc-500 font-medium">現況</span><span>${msg.situation}</span></div>
+            <div class="grid grid-cols-[36px_1fr] gap-1 text-zinc-300"><span class="text-zinc-500 font-medium">背景</span><span>${msg.background}</span></div>
+            <div class="grid grid-cols-[36px_1fr] gap-1 text-zinc-300"><span class="text-zinc-500 font-medium">評估</span><span>${msg.assessment}</span></div>
+            <div class="grid grid-cols-[36px_1fr] gap-1 text-zinc-300"><span class="text-zinc-500 font-medium">請求</span><span>${msg.request}</span></div>
+            ${msg.note ? `<div class="grid grid-cols-[36px_1fr] gap-1 text-amber-200/90 pt-1 border-t border-zinc-800/60"><span class="text-zinc-500 font-medium">附註</span><span>${msg.note}</span></div>` : ''}
+          </div>
+
+          <div class="mt-3 pt-2 border-t border-zinc-800/60 flex items-center justify-between">
+            <div class="flex items-center gap-1.5">
+              <button onclick="triggerCallbackModal('${msg.id}', '${msg.senderName}', '${msg.request}')" class="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-200 rounded-lg transition font-medium">
+                回撥
+              </button>
+              <button onclick="openReplyModal('${msg.id}', '${msg.senderName}')" class="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-200 rounded-lg transition font-medium">
+                訊息
+              </button>
+            </div>
+            <button onclick="dismissInboxCard('${msg.id}')" class="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-400 hover:text-white rounded-lg transition font-medium">
+              完成
+            </button>
+          </div>
+        `;
+        inboxContainer.appendChild(card);
+      });
+
+      // 2. 已傳送清單 (Outbox) - 點擊一樣可展開詳細架構；未回覆可撤銷
+      const outboxContainer = document.getElementById('list-outbox');
+      outboxContainer.innerHTML = '';
+
+      outboxMessages.forEach(out => {
+        const item = document.createElement('div');
+        item.id = `outcard-${out.id}`;
+        item.className = "bg-zinc-900/80 border border-zinc-800 rounded-2xl p-3 shadow-sm";
+
+        const isReplied = out.status === 'replied';
+
+        item.innerHTML = `
+          <div class="flex items-center justify-between text-xs">
+            <button onclick="openProfile('${out.targetId}')" class="font-semibold text-zinc-200 hover:underline">
+              ${out.targetName}
+            </button>
+            <span class="text-[11px] font-medium ${isReplied ? 'text-emerald-400' : 'text-zinc-500'}">
+              ${isReplied ? '已回覆' : '等待回覆中'}
+            </span>
+          </div>
+
+          <div class="mt-2 cursor-pointer" onclick="toggleCardDetail('out-${out.id}')">
+            <div class="text-xs text-zinc-300 font-medium">請求：${out.request}</div>
+            ${isReplied ? `
+              <div class="mt-2 bg-zinc-950 p-2 rounded-xl text-xs text-zinc-300 border border-zinc-800/60">
+                <span class="text-zinc-500">回覆：</span>${out.replyText}
+              </div>
+            ` : ''}
+          </div>
+
+          <div id="detail-out-${out.id}" class="hidden mt-3 pt-2.5 border-t border-zinc-800 text-xs space-y-1.5">
+            <div class="grid grid-cols-[36px_1fr] gap-1 text-zinc-300"><span class="text-zinc-500 font-medium">身分</span><span>${out.identity}</span></div>
+            <div class="grid grid-cols-[36px_1fr] gap-1 text-zinc-300"><span class="text-zinc-500 font-medium">現況</span><span>${out.situation}</span></div>
+            <div class="grid grid-cols-[36px_1fr] gap-1 text-zinc-300"><span class="text-zinc-500 font-medium">背景</span><span>${out.background}</span></div>
+            <div class="grid grid-cols-[36px_1fr] gap-1 text-zinc-300"><span class="text-zinc-500 font-medium">評估</span><span>${out.assessment}</span></div>
+            <div class="grid grid-cols-[36px_1fr] gap-1 text-zinc-300"><span class="text-zinc-500 font-medium">請求</span><span>${out.request}</span></div>
+          </div>
+
+          <div class="mt-2.5 pt-2 border-t border-zinc-800/60 flex justify-end">
+            ${isReplied ? `
+              <button onclick="dismissOutboxCard('${out.id}')" class="text-xs text-zinc-400 hover:text-white px-2 py-0.5 rounded font-medium">
+                完成
+              </button>
+            ` : `
+              <button onclick="revokeOutboxCard('${out.id}')" class="text-xs text-rose-400 hover:text-rose-300 px-2 py-0.5 rounded font-medium">
+                撤銷
+              </button>
+            `}
+          </div>
+        `;
+        outboxContainer.appendChild(item);
+      });
+
+      // 更新頁籤與小工具上的動態數字
+      updateCounts();
+      lucide.createIcons();
+    }
+
+    function updateCounts() {
+      const inboxCount = inboxMessages.length;
+      const repliedCount = outboxMessages.filter(m => m.status === 'replied').length;
+
+      document.getElementById('tab-inbox').innerText = `待回覆 (${inboxCount})`;
+      document.getElementById('tab-outbox').innerText = `已傳送 (${repliedCount}回覆)`;
+      document.getElementById('widget-badge-count').innerText = inboxCount;
+
+      if (inboxMessages.length > 0) {
+        document.getElementById('widget-urgent-tag').innerText = `最急: ${inboxMessages[0].timeLeft}`;
+        document.getElementById('widget-preview-text').innerText = `${inboxMessages[0].senderName} · ${inboxMessages[0].request}`;
+      } else {
+        document.getElementById('widget-urgent-tag').innerText = "已無待辦";
+        document.getElementById('widget-preview-text').innerText = "所有留言皆已銷案";
+      }
+    }
+
+    function toggleCardDetail(id) {
+      const detail = document.getElementById(`detail-${id}`);
+      if (detail) detail.classList.toggle('hidden');
+      lucide.createIcons();
+    }
+
+    function dismissInboxCard(id) {
+      const card = document.getElementById(`card-${id}`);
+      if (card) {
+        card.classList.add('card-leave');
+        setTimeout(() => {
+          inboxMessages = inboxMessages.filter(m => m.id !== id);
+          renderBoard();
+        }, 200);
+      }
+    }
+
+    function dismissOutboxCard(id) {
+      outboxMessages = outboxMessages.filter(m => m.id !== id);
+      renderBoard();
+    }
+
+    function revokeOutboxCard(id) {
+      if (confirm("確定要撤銷此則已送出的通報？")) {
+        outboxMessages = outboxMessages.filter(m => m.id !== id);
+        renderBoard();
+      }
+    }
+
+    // ==========================================
+    // 小工具桌面交互：短按輪巡跳轉，長按選單
+    // ==========================================
+    function startWidgetPress() {
+      isLongPress = false;
+      pressTimer = setTimeout(() => {
+        isLongPress = true;
+        openWidgetPickerModal();
+      }, 500);
+    }
+
+    function endWidgetPress(e) {
+      clearTimeout(pressTimer);
+      if (!isLongPress) {
+        // 短按：依序輪轉已啟用的狀態
+        cycleActiveStatus();
+      }
+      isLongPress = false;
+    }
+
+    function cycleActiveStatus() {
+      const activeStatuses = userStatuses.filter(s => s.active);
+      if (activeStatuses.length === 0) return;
+      currentStatusIndex = (currentStatusIndex + 1) % activeStatuses.length;
+      const target = activeStatuses[currentStatusIndex];
+      applyNewStatus(target.name, target.pref);
+    }
+
+    function openWidgetPickerModal() {
+      const container = document.getElementById('widget-picker-options');
+      container.innerHTML = '';
+
+      userStatuses.filter(s => s.active).forEach(s => {
+        const btn = document.createElement('button');
+        btn.className = "w-full p-2.5 rounded-xl bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-left flex justify-between items-center text-zinc-200 transition";
+        btn.innerHTML = `
+          <span>${s.name} (${s.pref})</span>
+          <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-zinc-500"></i>
+        `;
+        btn.onclick = () => {
+          applyNewStatus(s.name, s.pref);
+          toggleModal('modal-widget-picker', false);
+        };
+        container.appendChild(btn);
+      });
+
+      toggleModal('modal-widget-picker', true);
+      lucide.createIcons();
+    }
+
+    function applyNewStatus(name, pref) {
+      const full = `${name} (${pref})`;
+      document.getElementById('widget-status-text').innerText = full;
+      document.getElementById('badge-board-status').innerText = full;
+      // 同步通訊錄中的林醫師
+      const me = staffDirectory.find(s => s.id === 'EMP1028');
+      if (me) {
+        me.status = name;
+        me.pref = pref;
+      }
+    }
+
+    // ==========================================
+    // 醫護人員個人檔案卡
+    // ==========================================
+    function openProfile(staffId) {
+      const staff = staffId === 'self' 
+        ? staffDirectory.find(s => s.id === 'EMP1028') 
+        : staffDirectory.find(s => s.id === staffId);
+      if (!staff) return;
+
+      document.getElementById('prof-avatar').innerText = staff.name.charAt(0);
+      document.getElementById('prof-name').innerText = staff.name;
+      document.getElementById('prof-dept').innerText = `${staff.dept} · 員工編號 ${staff.id}`;
+      document.getElementById('prof-status').innerText = staff.status;
+      document.getElementById('prof-pref').innerText = staff.pref;
+      document.getElementById('prof-note').innerText = staff.note || '暫無個人附註';
+
+      toggleModal('modal-profile', true);
+      activeCallContext.name = staff.name;
+      activeCallContext.reason = staff.dept;
+      activeCallContext.avatar = staff.name.charAt(0);
+      activeCallContext.isReply = false;
+    }
+
+    function directCallFromProfile(type) {
+      toggleModal('modal-profile', false);
+      activeCallContext.type = type;
+      activeCallContext.isReply = false;
+      showCallScreen();
+    }
+
+    function directMessageFromProfile() {
+      toggleModal('modal-profile', false);
+      openComposerWithTarget(activeCallContext.name);
+    }
+
+    // ==========================================
+    // 通話發起與回撥 (急 Call vs 一般 Call，無架構)
+    // ==========================================
+    function triggerCallbackModal(msgId, name, reason) {
+      activeCallContext.isReply = true;
+      activeCallContext.name = name;
+      activeCallContext.reason = `針對：${reason}`;
+      activeCallContext.avatar = name.charAt(0);
+      activeCallContext.msgId = msgId;
+
+      document.getElementById('call-modal-title').innerText = `回撥給 ${name}`;
+      toggleModal('modal-call-type', true);
+    }
+
+    function executeCall(type) {
+      toggleModal('modal-call-type', false);
+      activeCallContext.type = type;
+      showCallScreen();
+    }
+
+    function showCallScreen() {
+      document.getElementById('call-context-tag').innerText = activeCallContext.isReply ? '回覆留言' : '主動通話';
+      document.getElementById('call-target-name').innerText = activeCallContext.name;
+      document.getElementById('call-target-reason').innerText = activeCallContext.reason || '即時語音連線';
+      document.getElementById('call-avatar').innerText = activeCallContext.avatar || '醫';
+
+      const typeIndicator = document.getElementById('call-type-indicator');
+      if (activeCallContext.type === 'urgent') {
+        typeIndicator.innerText = "🚨 急 Call";
+        typeIndicator.className = "text-xs text-rose-400 mt-1 font-semibold";
+      } else {
+        typeIndicator.innerText = "📞 一般 Call";
+        typeIndicator.className = "text-xs text-zinc-300 mt-1";
+      }
+
+      switchScreen('call');
+    }
+
+    function endCall() {
+      if (activeCallContext.isReply && activeCallContext.msgId) {
+        dismissInboxCard(activeCallContext.msgId);
+      }
+      switchScreen('board');
+    }
+
+    // ==========================================
+    // 發報流程 (Composer: 先選對象 -> 再選方式)
+    // ==========================================
+    function openComposer() {
+      switchScreen('composer');
+      renderStaffSelectList(staffDirectory);
+      document.getElementById('selected-target-card').classList.add('hidden');
+      document.getElementById('composer-mode-section').classList.add('hidden');
+      document.getElementById('section-message-form').classList.add('hidden');
+      document.getElementById('section-direct-call-hint').classList.add('hidden');
+    }
+
+    function openComposerWithTarget(name) {
+      const staff = staffDirectory.find(s => s.name.includes(name) || name.includes(s.name));
+      if (staff) {
+        openComposer();
+        selectStaff(staff.id);
+      } else {
+        openComposer();
+      }
+    }
+
+    function renderStaffSelectList(list) {
+      const container = document.getElementById('staff-select-list');
+      container.innerHTML = '';
+      list.forEach(s => {
+        const item = document.createElement('div');
+        item.className = "p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800/80 cursor-pointer flex justify-between items-center text-xs transition";
+        item.onclick = () => selectStaff(s.id);
+        item.innerHTML = `
+          <div>
+            <span class="font-medium text-zinc-200">${s.name}</span>
+            <span class="text-zinc-500 text-[11px] ml-1.5">${s.dept} (${s.id})</span>
+          </div>
+          <span class="text-[11px] text-zinc-400 bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800">${s.status} (${s.pref})</span>
+        `;
+        container.appendChild(item);
+      });
+    }
+
+    function filterStaffDirectory(keyword) {
+      const filtered = staffDirectory.filter(s => 
+        s.name.includes(keyword) || s.id.toLowerCase().includes(keyword.toLowerCase()) || s.dept.includes(keyword)
+      );
+      renderStaffSelectList(filtered);
+    }
+
+    function filterStaffByDept(dept) {
+      document.querySelectorAll('.dept-chip').forEach(c => {
+        c.className = "dept-chip px-2.5 py-1 bg-zinc-900 border border-zinc-800 text-zinc-400 rounded-lg";
+      });
+      event.target.className = "dept-chip px-2.5 py-1 bg-zinc-800 text-white rounded-lg";
+      if (dept === 'all') renderStaffSelectList(staffDirectory);
+      else renderStaffSelectList(staffDirectory.filter(s => s.dept === dept));
+    }
+
+    function selectStaff(id) {
+      selectedStaffId = id;
+      const s = staffDirectory.find(staff => staff.id === id);
+      if (!s) return;
+
+      document.getElementById('selected-target-name').innerText = s.name;
+      document.getElementById('selected-target-dept').innerText = `${s.dept} · ${s.id}`;
+      document.getElementById('selected-target-status').innerText = `${s.status} (${s.pref})`;
+      document.getElementById('selected-target-card').classList.remove('hidden');
+      document.getElementById('composer-mode-section').classList.remove('hidden');
+
+      setSendMode('message');
+    }
+
+    function setSendMode(mode) {
+      composerMode = mode;
+      const btnU = document.getElementById('btn-mode-urgent');
+      const btnN = document.getElementById('btn-mode-normal');
+      const btnM = document.getElementById('btn-mode-msg');
+      const formMsg = document.getElementById('section-message-form');
+      const hintCall = document.getElementById('section-direct-call-hint');
+      const btnCallAction = document.getElementById('btn-direct-call-action');
+
+      [btnU, btnN, btnM].forEach(b => {
+        b.className = "p-2.5 rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-400 flex flex-col items-center gap-1 transition";
+      });
+
+      if (mode === 'urgent-call') {
+        btnU.className = "p-2.5 rounded-xl border border-rose-500 bg-rose-950/30 text-white flex flex-col items-center gap-1 transition";
+        formMsg.classList.add('hidden');
+        hintCall.classList.remove('hidden');
+        btnCallAction.innerText = "撥打急 Call";
+        btnCallAction.className = "w-full py-3 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded-xl text-xs transition";
+      } else if (mode === 'normal-call') {
+        btnN.className = "p-2.5 rounded-xl border border-zinc-500 bg-zinc-800 text-white flex flex-col items-center gap-1 transition";
+        formMsg.classList.add('hidden');
+        hintCall.classList.remove('hidden');
+        btnCallAction.innerText = "撥打一般 Call";
+        btnCallAction.className = "w-full py-3 bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700 font-semibold rounded-xl text-xs transition";
+      } else {
+        btnM.className = "p-2.5 rounded-xl border border-zinc-600 bg-zinc-800 text-white flex flex-col items-center gap-1 transition";
+        formMsg.classList.remove('hidden');
+        hintCall.classList.add('hidden');
+      }
+      lucide.createIcons();
+    }
+
+    function startDirectCallFromComposer() {
+      const s = staffDirectory.find(staff => staff.id === selectedStaffId);
+      activeCallContext.isReply = false;
+      activeCallContext.name = s ? s.name : '醫療人員';
+      activeCallContext.reason = '主動發起通話';
+      activeCallContext.type = (composerMode === 'urgent-call') ? 'urgent' : 'normal';
+      showCallScreen();
+    }
+
+    function pickDeadline(btn, val) {
+      document.querySelectorAll('.deadline-chip').forEach(b => {
+        b.className = "deadline-chip flex-1 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-400";
+      });
+      btn.className = "deadline-chip flex-1 py-1.5 rounded-lg bg-zinc-800 border border-zinc-600 text-xs text-white font-medium";
+      composerDeadline = val;
+    }
+
+    function simulateAISpeech() {
+      document.getElementById('form-i').value = "302床 張O美 (72F / 胃切除術後)";
+      document.getElementById('form-s').value = "腹部引流管近半小時引流 250ml 鮮紅血，BP 85/50";
+      document.getElementById('form-b').value = "昨日下午手術，原服用抗凝血劑，目前已快輸生理鹽水";
+      document.getElementById('form-a').value = "疑似吻合處活動性出血併低血容休克";
+      document.getElementById('form-r').value = "請求林醫師評估是否急送開刀房探查止血？";
+      document.getElementById('form-note').value = "家屬在床邊情緒焦慮";
+    }
+
+    function submitNewMessage() {
+      const s = staffDirectory.find(staff => staff.id === selectedStaffId);
+      const req = document.getElementById('form-r').value || '未填寫請求事項';
+      
+      outboxMessages.unshift({
+        id: `out-${Date.now()}`,
+        targetId: selectedStaffId,
+        targetName: s ? s.name : '照會醫師',
+        status: 'waiting',
+        replyText: '',
+        identity: document.getElementById('form-i').value || '無身分資訊',
+        situation: document.getElementById('form-s').value || '',
+        background: document.getElementById('form-b').value || '',
+        assessment: document.getElementById('form-a').value || '',
+        request: req,
+        note: document.getElementById('form-note').value || ''
+      });
+
+      renderBoard();
+      switchScreen('board');
+    }
+
+    // ==========================================
+    // 回覆抽屜 (自己打 vs 語音 AI 總結)
+    // ==========================================
+    let currentReplyTarget = null;
+
+    function openReplyModal(msgId, name) {
+      currentReplyTarget = { msgId, name };
+      document.getElementById('reply-title').innerText = `回覆 ${name}`;
+      document.getElementById('input-reply-text').value = '';
+      document.getElementById('ai-summary-output').value = '';
+      switchReplyMode('text');
+      toggleModal('modal-reply', true);
+    }
+
+    function switchReplyMode(mode) {
+      const t = document.getElementById('reply-text-area');
+      const v = document.getElementById('reply-voice-area');
+      const bt = document.getElementById('btn-reply-text');
+      const bv = document.getElementById('btn-reply-voice');
+
+      if (mode === 'text') {
+        t.classList.remove('hidden');
+        v.classList.add('hidden');
+        bt.className = "flex-1 py-1.5 rounded-lg bg-zinc-800 text-zinc-100 font-medium";
+        bv.className = "flex-1 py-1.5 rounded-lg text-zinc-400 hover:text-white";
+      } else {
+        t.classList.add('hidden');
+        v.classList.remove('hidden');
+        bv.className = "flex-1 py-1.5 rounded-lg bg-zinc-800 text-zinc-100 font-medium";
+        bt.className = "flex-1 py-1.5 rounded-lg text-zinc-400 hover:text-white";
+      }
+      lucide.createIcons();
+    }
+
+    function simulateVoiceSummary() {
+      const out = document.getElementById('ai-summary-output');
+      out.value = "處理中...";
+      setTimeout(() => {
+        out.value = "我立即過去評估，請先給予 Transamin 2支 IV stat，並備妥手術同意書。";
+      }, 400);
+    }
+
+    function sendReply() {
+      const replyContent = document.getElementById('input-reply-text').value || document.getElementById('ai-summary-output').value || '已收到處理。';
+      toggleModal('modal-reply', false);
+      if (currentReplyTarget && currentReplyTarget.msgId) {
+        dismissInboxCard(currentReplyTarget.msgId);
+      }
+    }
+
+    // ==========================================
+    // 設定區管理
+    // ==========================================
+    function updateDisplaySetting(mode) {
+      displayPreference = mode;
+      renderBoard();
+    }
+
+    function renderSettingsStatusList() {
+      const container = document.getElementById('settings-status-list');
+      container.innerHTML = '';
+
+      userStatuses.forEach((st, idx) => {
+        const item = document.createElement('div');
+        item.className = "p-2 rounded-xl bg-zinc-950 border border-zinc-800 flex items-center justify-between";
+        item.innerHTML = `
+          <div class="flex items-center gap-2">
+            <input type="checkbox" ${st.active ? 'checked' : ''} onchange="toggleStatusActive(${idx}, this.checked)" class="accent-zinc-100">
+            <span class="font-medium text-zinc-200">${st.name}</span>
+          </div>
+          <select onchange="updateStatusPref(${idx}, this.value)" class="bg-zinc-900 border border-zinc-700 text-zinc-300 text-[11px] rounded px-1.5 py-0.5 outline-none">
+            <option value="盡量留言" ${st.pref === '盡量留言' ? 'selected' : ''}>盡量留言</option>
+            <option value="可call" ${st.pref === '可call' ? 'selected' : ''}>可call</option>
+            <option value="可call可留言" ${st.pref === '可call可留言' ? 'selected' : ''}>可call可留言</option>
+            <option value="請勿打擾" ${st.pref === '請勿打擾' ? 'selected' : ''}>請勿打擾</option>
+          </select>
+        `;
+        container.appendChild(item);
+      });
+    }
+
+    function toggleStatusActive(idx, val) {
+      userStatuses[idx].active = val;
+    }
+
+    function updateStatusPref(idx, val) {
+      userStatuses[idx].pref = val;
+      if (currentStatusIndex === idx) {
+        applyNewStatus(userStatuses[idx].name, val);
+      }
+    }
+
+    function saveMyNote() {
+      myCustomNote = document.getElementById('setting-my-note').value;
+      const me = staffDirectory.find(s => s.id === 'EMP1028');
+      if (me) me.note = myCustomNote;
+      alert("✓ 個人附註已儲存！");
+    }
+
+    // 通用彈窗開關
+    function toggleModal(id, show) {
+      const el = document.getElementById(id);
+      if (show) el.classList.remove('hidden');
+      else el.classList.add('hidden');
+      lucide.createIcons();
+    }
+  </script>
+</body>
+</html>
